@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: simple-api
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    database: postgresql
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: sa
+    password: 12345678
+#  h2:
+#    console:
+#      enabled: true
+#  datasource:
+#    url: jdbc:h2:mem:testdb
