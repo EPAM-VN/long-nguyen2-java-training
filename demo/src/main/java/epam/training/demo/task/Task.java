@@ -16,6 +16,7 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -68,6 +69,9 @@ public class Task {
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    @Version
+    private Long version;
 
     @ManyToMany
     @JoinTable(

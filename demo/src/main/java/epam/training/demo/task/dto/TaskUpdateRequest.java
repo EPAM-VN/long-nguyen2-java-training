@@ -27,6 +27,9 @@ public record TaskUpdateRequest(
 
         LocalDate dueDate,
 
-        Long assigneeId
+        Long assigneeId,
+
+        @NotNull
+        Long version
 ) {
 }

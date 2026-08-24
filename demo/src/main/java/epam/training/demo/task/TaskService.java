@@ -10,6 +10,7 @@ import epam.training.demo.user.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,6 +63,11 @@ public class TaskService {
     @Transactional
     public Task update(Long projectId, Long taskId, TaskUpdateRequest request) {
         Task task = findByIdForProject(projectId, taskId);
+
+        if (!request.version().equals(task.getVersion())) {
+            throw new ObjectOptimisticLockingFailureException(Task.class, taskId);
+        }
+
         User assignee = resolveAssignee(request.assigneeId());
 
         task.setTitle(request.title());

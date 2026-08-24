@@ -5,12 +5,14 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "baseUrl", "value": "http://localhost:8081" },
     { "key": "ownerId", "value": "2" },
     { "key": "otherOwnerId", "value": "3" },
     { "key": "projectId", "value": "" },
     { "key": "secondProjectId", "value": "" },
     { "key": "taskId", "value": "" },
+    { "key": "taskVersion", "value": "" },
+    { "key": "taskStaleVersion", "value": "" },
     { "key": "searchTaskId", "value": "" }
   ],
   "item": [
@@ -318,7 +320,9 @@
                 "const json = pm.response.json();",
                 "pm.test(\"status defaults to TODO\", () => pm.expect(json.status).to.eql(\"TODO\"));",
                 "pm.test(\"priority defaults to MEDIUM\", () => pm.expect(json.priority).to.eql(\"MEDIUM\"));",
-                "pm.collectionVariables.set(\"taskId\", json.id);"
+                "pm.test(\"version starts at 0\", () => pm.expect(json.version).to.eql(0));",
+                "pm.collectionVariables.set(\"taskId\", json.id);",
+                "pm.collectionVariables.set(\"taskVersion\", json.version);"
               ]
             }
           }]
@@ -645,7 +649,7 @@
             "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/{{taskId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Fix login bug (updated)\",\n  \"description\": \"Turned out to be a session timeout issue\",\n  \"status\": \"DONE\",\n  \"priority\": \"HIGH\"\n}",
+              "raw": "{\n  \"title\": \"Fix login bug (updated)\",\n  \"description\": \"Turned out to be a session timeout issue\",\n  \"status\": \"DONE\",\n  \"priority\": \"HIGH\",\n  \"version\": {{taskVersion}}\n}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -654,9 +658,38 @@
             "script": {
               "type": "text/javascript",
               "exec": [
+                "const usedVersion = pm.collectionVariables.get(\"taskVersion\");",
                 "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
                 "const json = pm.response.json();",
-                "pm.test(\"status updated to DONE\", () => pm.expect(json.status).to.eql(\"DONE\"));"
+                "pm.test(\"status updated to DONE\", () => pm.expect(json.status).to.eql(\"DONE\"));",
+                "pm.test(\"version incremented\", () => pm.expect(json.version).to.eql((usedVersion * 1) + 1));",
+                "pm.collectionVariables.set(\"taskStaleVersion\", usedVersion);",
+                "pm.collectionVariables.set(\"taskVersion\", json.version);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update Task - stale version (409, optimistic locking)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/{{taskId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Should be rejected\",\n  \"description\": \"reusing the version from before the previous update\",\n  \"status\": \"TODO\",\n  \"priority\": \"LOW\",\n  \"version\": {{taskStaleVersion}}\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 409\", () => pm.response.to.have.status(409));",
+                "const json = pm.response.json();",
+                "pm.test(\"Content-Type is application/problem+json\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\"));",
+                "pm.test(\"detail does not echo internal exception details\", () => pm.expect(json.detail).to.not.include(\"Hibernate\"));"
               ]
             }
           }]
@@ -669,7 +702,7 @@
             "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/{{taskId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Missing status field\",\n  \"priority\": \"HIGH\"\n}",
+              "raw": "{\n  \"title\": \"Missing status field\",\n  \"priority\": \"HIGH\",\n  \"version\": {{taskVersion}}\n}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -686,6 +719,30 @@
           }]
         },
         {
+          "name": "Update Task - missing version (400, @NotNull)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/{{taskId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Missing version field\",\n  \"status\": \"DONE\",\n  \"priority\": \"HIGH\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));",
+                "const json = pm.response.json();",
+                "pm.test(\"errors.version reported\", () => pm.expect(json.errors).to.have.property(\"version\"));"
+              ]
+            }
+          }]
+        },
+        {
           "name": "Update Task - wrong project (404, cross-project block)",
           "request": {
             "method": "PUT",
@@ -693,7 +750,7 @@
             "url": "{{baseUrl}}/api/projects/{{secondProjectId}}/tasks/{{taskId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Hijack attempt\",\n  \"status\": \"DONE\",\n  \"priority\": \"LOW\"\n}",
+              "raw": "{\n  \"title\": \"Hijack attempt\",\n  \"status\": \"DONE\",\n  \"priority\": \"LOW\",\n  \"version\": {{taskVersion}}\n}",
               "options": { "raw": { "language": "json" } }
             }
           },

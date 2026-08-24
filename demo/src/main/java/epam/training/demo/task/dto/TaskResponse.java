@@ -16,7 +16,8 @@ public record TaskResponse(
         LocalDate dueDate,
         Long assigneeId,
         Long projectId,
-        Instant createdAt
+        Instant createdAt,
+        Long version
 ) {
 
     public static TaskResponse from(Task task) {
@@ -29,6 +30,7 @@ public record TaskResponse(
                 task.getDueDate(),
                 task.getAssignee() == null ? null : task.getAssignee().getId(),
                 task.getProject().getId(),
-                task.getCreatedAt());
+                task.getCreatedAt(),
+                task.getVersion());
     }
 }
