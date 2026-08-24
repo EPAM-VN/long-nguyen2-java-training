@@ -1,0 +1,798 @@
+{
+  "info": {
+    "name": "Taskflow API",
+    "description": "Covers Project + Task CRUD, validation failures, 404 handling, cross-project ownership checks, pagination/filtering, and the four Task query techniques (JOIN FETCH-backed list, JPQL status-counts, native ILIKE search, projection summary).\n\nPrerequisites:\n- The app must be running (`./mvnw spring-boot:run`), Docker up for the Postgres compose service.\n- Two users must already exist in the DB (there's no registration endpoint yet - Day 9). Seed them once with:\n  `docker exec -it demo-postgres-1 psql -U taskflow -d taskflow -c \"INSERT INTO users (username, email, password_hash) VALUES ('postman.alice','postman.alice@example.com','placeholder'), ('postman.bob','postman.bob@example.com','placeholder') RETURNING id, username;\"`\n  and set the `ownerId` / `otherOwnerId` collection variables to the returned ids (defaults below assume ids 2 and 3).\n\nRun the whole collection top to bottom (Collection Runner) - later requests depend on ids captured by earlier ones via test scripts.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "ownerId", "value": "2" },
+    { "key": "otherOwnerId", "value": "3" },
+    { "key": "projectId", "value": "" },
+    { "key": "secondProjectId", "value": "" },
+    { "key": "taskId", "value": "" },
+    { "key": "searchTaskId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 - Projects",
+      "item": [
+        {
+          "name": "Create Project (valid)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Taskflow API\",\n  \"description\": \"Build the REST layer\",\n  \"ownerId\": {{ownerId}}\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "pm.test(\"Location header present\", () => pm.expect(pm.response.headers.get(\"Location\")).to.include(\"/api/projects/\"));",
+                "const json = pm.response.json();",
+                "pm.test(\"Response has generated id\", () => pm.expect(json.id).to.be.a(\"number\"));",
+                "pm.test(\"ownerId echoed\", () => pm.expect(json.ownerId).to.eql(pm.collectionVariables.get(\"ownerId\") * 1));",
+                "pm.test(\"taskCount is 0 for a new project\", () => pm.expect(json.taskCount).to.eql(0));",
+                "pm.collectionVariables.set(\"projectId\", json.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Second Project (for cross-project tests)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Second Project\",\n  \"description\": \"Owned by a different user - used to prove cross-project task access is blocked\",\n  \"ownerId\": {{otherOwnerId}}\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.collectionVariables.set(\"secondProjectId\", json.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Project - blank name (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"description\": \"no name\",\n  \"ownerId\": {{ownerId}}\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));",
+                "pm.test(\"Content-Type is application/problem+json\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\"));",
+                "const json = pm.response.json();",
+                "pm.test(\"errors.name reported\", () => pm.expect(json.errors).to.have.property(\"name\"));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Project - padded name (400, custom constraint)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"   Sprint 1   \",\n  \"description\": \"padded name\",\n  \"ownerId\": {{ownerId}}\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));",
+                "const json = pm.response.json();",
+                "pm.test(\"errors.name reported\", () => pm.expect(json.errors).to.have.property(\"name\"));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Project - missing ownerId (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"No Owner\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));",
+                "const json = pm.response.json();",
+                "pm.test(\"errors.ownerId reported\", () => pm.expect(json.errors).to.have.property(\"ownerId\"));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Project - non-existent ownerId (404)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ghost Owner\",\n  \"ownerId\": 999999\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));",
+                "const json = pm.response.json();",
+                "pm.test(\"detail mentions the missing user\", () => pm.expect(json.detail).to.include(\"999999\"));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get All Projects",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"Response is an array\", () => pm.expect(json).to.be.an(\"array\"));",
+                "pm.test(\"Created project is present\", () => {",
+                "  const ids = json.map(p => p.id);",
+                "  pm.expect(ids).to.include(pm.collectionVariables.get(\"projectId\") * 1);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Project By Id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"id matches\", () => pm.expect(json.id).to.eql(pm.collectionVariables.get(\"projectId\") * 1));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Project By Id - not found (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/999999"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));",
+                "pm.test(\"Content-Type is application/problem+json\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\"));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update Project (valid)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Taskflow API v2\",\n  \"description\": \"Updated description\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"name updated\", () => pm.expect(json.name).to.eql(\"Taskflow API v2\"));",
+                "pm.test(\"ownerId unchanged (not reassignable via update)\", () => pm.expect(json.ownerId).to.eql(pm.collectionVariables.get(\"ownerId\") * 1));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update Project - blank name (400)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"description\": \"still blank\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update Project - not found (404)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/999999",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Doesn't matter\",\n  \"description\": \"x\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "02 - Tasks",
+      "item": [
+        {
+          "name": "Create Task (minimal, valid)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Fix login bug\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.test(\"status defaults to TODO\", () => pm.expect(json.status).to.eql(\"TODO\"));",
+                "pm.test(\"priority defaults to MEDIUM\", () => pm.expect(json.priority).to.eql(\"MEDIUM\"));",
+                "pm.collectionVariables.set(\"taskId\", json.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Task (full fields)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Write onboarding docs\",\n  \"description\": \"Cover setup + first PR\",\n  \"status\": \"IN_PROGRESS\",\n  \"priority\": \"LOW\",\n  \"dueDate\": \"2026-12-01\",\n  \"assigneeId\": {{ownerId}}\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.test(\"fields echoed correctly\", () => {",
+                "  pm.expect(json.status).to.eql(\"IN_PROGRESS\");",
+                "  pm.expect(json.priority).to.eql(\"LOW\");",
+                "  pm.expect(json.assigneeId).to.eql(pm.collectionVariables.get(\"ownerId\") * 1);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Task (for case-insensitive search test)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"urgent fix\",\n  \"priority\": \"HIGH\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.collectionVariables.set(\"searchTaskId\", json.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Task - blank title (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Task - padded title (400, custom constraint)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"   padded title   \"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Task - non-existent assigneeId (404)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Assigned to nobody real\",\n  \"assigneeId\": 999999\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Task - project not found (404)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/999999/tasks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Orphan task\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Tasks (paginated, default)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"Page shape has content/totalElements/totalPages\", () => {",
+                "  pm.expect(json).to.have.property(\"content\");",
+                "  pm.expect(json).to.have.property(\"totalElements\");",
+                "  pm.expect(json).to.have.property(\"totalPages\");",
+                "});",
+                "pm.test(\"totalElements is at least 3\", () => pm.expect(json.totalElements).to.be.at.least(3));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Tasks - page=0&size=1",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks?page=0&size=1"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"numberOfElements is 1\", () => pm.expect(json.numberOfElements).to.eql(1));",
+                "pm.test(\"first is true\", () => pm.expect(json.first).to.eql(true));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Tasks - size=99999 (capped by taskflow.maxPageSize)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks?size=99999"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"size is capped at 100, not 99999\", () => pm.expect(json.size).to.eql(100));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Tasks - filter status=TODO",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks?status=TODO"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"every task has status TODO\", () => {",
+                "  json.content.forEach(t => pm.expect(t.status).to.eql(\"TODO\"));",
+                "});",
+                "pm.test(\"priority was not accidentally filtered\", () => {",
+                "  const priorities = new Set(json.content.map(t => t.priority));",
+                "  pm.expect(priorities.size).to.be.at.least(1);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Tasks - filter status=TODO&priority=HIGH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks?status=TODO&priority=HIGH"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"every task matches both filters\", () => {",
+                "  json.content.forEach(t => {",
+                "    pm.expect(t.status).to.eql(\"TODO\");",
+                "    pm.expect(t.priority).to.eql(\"HIGH\");",
+                "  });",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Status Counts",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/status-counts"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"Response is an array of {status, count}\", () => {",
+                "  pm.expect(json).to.be.an(\"array\");",
+                "  json.forEach(entry => {",
+                "    pm.expect(entry).to.have.property(\"status\");",
+                "    pm.expect(entry).to.have.property(\"count\");",
+                "  });",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Search Tasks - case-insensitive (ILIKE)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/search?keyword=URGENT"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"matches lowercase-titled task despite uppercase keyword\", () => {",
+                "  const ids = json.map(t => t.id);",
+                "  pm.expect(ids).to.include(pm.collectionVariables.get(\"searchTaskId\") * 1);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Task Summary (projection)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/summary"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"each item has exactly id/title/status\", () => {",
+                "  json.forEach(item => {",
+                "    pm.expect(Object.keys(item).sort()).to.eql([\"id\", \"status\", \"title\"]);",
+                "  });",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update Task (valid)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/{{taskId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Fix login bug (updated)\",\n  \"description\": \"Turned out to be a session timeout issue\",\n  \"status\": \"DONE\",\n  \"priority\": \"HIGH\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"status updated to DONE\", () => pm.expect(json.status).to.eql(\"DONE\"));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update Task - missing status (400, @NotNull on update)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/{{taskId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Missing status field\",\n  \"priority\": \"HIGH\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));",
+                "const json = pm.response.json();",
+                "pm.test(\"errors.status reported\", () => pm.expect(json.errors).to.have.property(\"status\"));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update Task - wrong project (404, cross-project block)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects/{{secondProjectId}}/tasks/{{taskId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Hijack attempt\",\n  \"status\": \"DONE\",\n  \"priority\": \"LOW\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 404, not a silent success\", () => pm.response.to.have.status(404));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Delete Task - wrong project (404, cross-project block)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/projects/{{secondProjectId}}/tasks/{{taskId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 404, not a silent success\", () => pm.response.to.have.status(404));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Delete Task (valid)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}/tasks/{{taskId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 204\", () => pm.response.to.have.status(204));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "03 - Cleanup",
+      "item": [
+        {
+          "name": "Delete Project",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 204\", () => pm.response.to.have.status(204));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Deleted Project (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/projects/{{projectId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Delete Second Project",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/projects/{{secondProjectId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 204\", () => pm.response.to.have.status(204));"
+              ]
+            }
+          }]
+        }
+      ]
+    }
+  ]
+}
