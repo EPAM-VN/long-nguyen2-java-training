@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="105a899d-1d16-4b16-b08f-ea4c66d8aa34" name="Changes" comment="simple layered spring boot api" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExternalProjectsData">
+    <projectState path="$PROJECT_DIR$/web">
+      <ProjectState />
+    </projectState>
+  </component>
+  <component name="ExternalProjectsManager">
+    <system id="GRADLE">
+      <state>
+        <projects_view>
+          <tree_state>
+            <expand>
+              <path>
+                <item name="" type="6a2764b6:ExternalProjectsStructure$RootNode" />
+                <item name="web" type="f1a62948:ProjectNode" />
+              </path>
+            </expand>
+            <select />
+          </tree_state>
+        </projects_view>
+      </state>
+    </system>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "longnguyen-epam"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/EPAM-VN/long-nguyen2-java-training.git",
+    "accountId": "ef68a372-7926-435c-ac62-d7143367da4f"
+  }
+}]]></component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.4965462477185179" />
+      <entry key="MS500" value="1.8693445600901297" />
+      <entry key="S2" value="1.9673790552416057" />
+      <entry key="S5" value="2.2942213893466956" />
+      <entry key="S10" value="4.272731596528533" />
+      <entry key="S30" value="17.07650574791293" />
+      <entry key="S60" value="32.65628279392084" />
+      <entry key="M2" value="51.045768204030615" />
+      <entry key="M5" value="73.44001593954835" />
+      <entry key="M10" value="86.57692666044181" />
+      <entry key="M15" value="92.57747202236783" />
+      <entry key="M30" value="100.07982801855375" />
+      <entry key="H1" value="104.65655599762484" />
+      <entry key="H2" value="107.21938892143295" />
+      <entry key="H4" value="108.58061237828295" />
+      <entry key="D1" value="109.75922633977154" />
+      <entry key="W1" value="109.96549838253051" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="3.065154872503249E-84" />
+      <entry key="S2" value="1.3231622616592357E-21" />
+      <entry key="S5" value="4.452923583633361E-9" />
+      <entry key="S10" value="6.673022990844065E-5" />
+      <entry key="S30" value="0.04056089602621774" />
+      <entry key="S60" value="0.20139738111722438" />
+      <entry key="M2" value="0.4489234332219122" />
+      <entry key="M5" value="0.7553520793120592" />
+      <entry key="M10" value="1.0238702383600402" />
+      <entry key="M15" value="1.207882151265862" />
+      <entry key="M30" value="1.5040479747446494" />
+      <entry key="H1" value="1.7193414025595388" />
+      <entry key="H2" value="1.850271617603412" />
+      <entry key="H4" value="1.9226120741928863" />
+      <entry key="D1" value="1.9867356668312632" />
+      <entry key="W1" value="1.9980959095932722" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="1.4522870070749176" />
+      <entry key="MS500" value="1.8578097272477334" />
+      <entry key="S2" value="1.9643187509700766" />
+      <entry key="S5" value="2.2927253740125537" />
+      <entry key="S10" value="4.2711132631133495" />
+      <entry key="S30" value="17.11196294752948" />
+      <entry key="S60" value="32.84896775999317" />
+      <entry key="M2" value="51.48577369446898" />
+      <entry key="M5" value="74.18934527906212" />
+      <entry key="M10" value="87.5963784367808" />
+      <entry key="M15" value="93.7816933134868" />
+      <entry key="M30" value="101.58144624650951" />
+      <entry key="H1" value="106.37445996195584" />
+      <entry key="H2" value="109.06887354897312" />
+      <entry key="H4" value="110.50281202285058" />
+      <entry key="D1" value="111.74589046464705" />
+      <entry key="W1" value="111.96358400080389" />
+    </decayedShown>
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 1,
+  "fromUser": false
+}]]></component>
+  <component name="ProjectId" id="3IAVAGF5yRa0IZOlUp5RDqpH589" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RequestMappingsPanelOrder0": "0",
+    "RequestMappingsPanelOrder1": "1",
+    "RequestMappingsPanelWidth0": "75",
+    "RequestMappingsPanelWidth1": "75",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "Spring Boot.SimpleApiApplication.executor": "Run",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "git-widget-placeholder": "spring-starter",
+    "junie.onboarding.icon.badge.shown": "true",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "F:/Training/Repos/long-nguyen2-java-training/boot-starter/simple-api/src/main/resources",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "to.speed.mode.migration.done": "true"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="F:\Training\Repos\long-nguyen2-java-training\boot-starter\simple-api\src\main\resources" />
+      <recent name="F:\Training\Repos\long-nguyen2-java-training\boot-starter\simple-api\src\main\java\epam\training\simpleapi" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Spring Boot.SimpleApiApplication">
+    <configuration name="SimpleApiApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
+      <module name="simple-api" />
+      <option name="SPRING_BOOT_MAIN_CLASS" value="epam.training.simpleapi.SimpleApiApplication" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="WebApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
+      <module name="web.main" />
+      <option name="SPRING_BOOT_MAIN_CLASS" value="epam.training.web.WebApplication" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-30f59d01ecdd-34e2839f716b-intellij.indexing.shared.core-IU-262.9437.185" />
+        <option value="bundled-js-predefined-d6986cc7102b-4abd2a77f808-JavaScript-IU-262.9437.185" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="105a899d-1d16-4b16-b08f-ea4c66d8aa34" name="Changes" comment="" />
+      <created>1787207217007</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1787207217007</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Initial commit" />
+    <MESSAGE value="simple layered spring boot api" />
+    <option name="LAST_COMMIT_MESSAGE" value="simple layered spring boot api" />
+  </component>
+</project>
