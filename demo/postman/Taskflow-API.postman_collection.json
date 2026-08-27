@@ -1,20 +1,21 @@
 {
   "info": {
     "name": "Taskflow API",
-    "description": "Covers Auth (register/login), Project + Task CRUD, validation failures, 404 handling, cross-project ownership checks, pagination/filtering, and the four Task query techniques (JOIN FETCH-backed list, JPQL status-counts, native ILIKE search, projection summary).\n\nPrerequisites:\n- The app must be running (`./mvnw spring-boot:run`), Docker up for the Postgres compose service.\n- Two users must already exist in the DB for project ownership (registration creates auth users, but `ownerId`/`otherOwnerId` below are separate, pre-existing project owners). Seed them once with:\n  `docker exec -it demo-postgres-1 psql -U taskflow -d taskflow -c \"INSERT INTO users (username, email, password_hash) VALUES ('postman.alice','postman.alice@example.com','placeholder'), ('postman.bob','postman.bob@example.com','placeholder') RETURNING id, username;\"`\n  and set the `ownerId` / `otherOwnerId` collection variables to the returned ids (defaults below assume ids 2 and 3).\n- Auth: no manual password-copying needed anymore (Step 9.2 added real registration, which replaces Boot's random-password fallback entirely - there's no `Using generated security password:` log line once a real UserDetailsService is wired up). The '00 - Auth' folder's first request self-registers a fresh test user every run and sets `authUsername`/`authPassword`, which the collection-level Authorization (Basic Auth) uses for every other request. Just run the collection top to bottom.\n\nRun the whole collection top to bottom (Collection Runner) - later requests depend on ids/values captured by earlier ones via test scripts.",
+    "description": "Covers Auth (register/login), Project + Task CRUD, validation failures, 404 handling, cross-project ownership checks, pagination/filtering, and the four Task query techniques (JOIN FETCH-backed list, JPQL status-counts, native ILIKE search, projection summary).\n\nPrerequisites:\n- The app must be running (`./mvnw spring-boot:run`), Docker up for the Postgres compose service, `JWT_SECRET` set in the app's environment.\n- Two users must already exist in the DB for project ownership tests unrelated to auth (task assigneeId in particular). Seed them once with:\n  `docker exec -it demo-postgres-1 psql -U taskflow -d taskflow -c \"INSERT INTO users (username, email, password_hash) VALUES ('postman.alice','postman.alice@example.com','placeholder'), ('postman.bob','postman.bob@example.com','placeholder') RETURNING id, username;\"`\n  and set the `ownerId` / `otherOwnerId` collection variables to the returned ids (defaults below assume ids 2 and 3).\n- Auth: no manual password-copying needed (Step 9.2 added real registration, replacing Boot's random-password fallback entirely). The '00 - Auth' folder self-registers a fresh test user, then logs in and captures the returned JWT into `authToken` - the collection-level Authorization (Bearer, not Basic - Step 9.6 removed httpBasic() from the app entirely) uses that token for every other request. Just run the collection top to bottom; a run takes under a minute, well inside the token's 1h expiration.\n- Project ownership (Step 9.9): every project/task-under-a-project request in this collection runs as the one self-registered user, so it's always the owner of what it creates - this collection does not (yet) exercise the cross-user 403 paths, which were verified separately via curl.\n\nRun the whole collection top to bottom (Collection Runner) - later requests depend on ids/values captured by earlier ones via test scripts.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
-    "type": "basic",
-    "basic": [
-      { "key": "username", "value": "{{authUsername}}", "type": "string" },
-      { "key": "password", "value": "{{authPassword}}", "type": "string" }
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{authToken}}", "type": "string" }
     ]
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8081" },
     { "key": "authUsername", "value": "" },
     { "key": "authPassword", "value": "CorrectHorse123!" },
+    { "key": "authToken", "value": "" },
+    { "key": "myUserId", "value": "" },
     { "key": "ownerId", "value": "2" },
     { "key": "otherOwnerId", "value": "3" },
     { "key": "projectId", "value": "" },
@@ -49,7 +50,8 @@
                 "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
                 "const json = pm.response.json();",
                 "pm.test(\"no password hash in response\", () => pm.expect(json).to.not.have.property(\"passwordHash\"));",
-                "pm.collectionVariables.set(\"authUsername\", json.username);"
+                "pm.collectionVariables.set(\"authUsername\", json.username);",
+                "pm.collectionVariables.set(\"myUserId\", json.id);"
               ]
             }
           }]
@@ -121,7 +123,10 @@
             "script": {
               "type": "text/javascript",
               "exec": [
-                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test(\"response contains a token\", () => pm.expect(json.token).to.be.a(\"string\").and.not.empty);",
+                "pm.collectionVariables.set(\"authToken\", json.token);"
               ]
             }
           }]
@@ -180,7 +185,7 @@
             "url": "{{baseUrl}}/api/projects",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Taskflow API\",\n  \"description\": \"Build the REST layer\",\n  \"ownerId\": {{ownerId}}\n}",
+              "raw": "{\n  \"name\": \"Taskflow API\",\n  \"description\": \"Build the REST layer\"\n}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -193,9 +198,34 @@
                 "pm.test(\"Location header present\", () => pm.expect(pm.response.headers.get(\"Location\")).to.include(\"/api/projects/\"));",
                 "const json = pm.response.json();",
                 "pm.test(\"Response has generated id\", () => pm.expect(json.id).to.be.a(\"number\"));",
-                "pm.test(\"ownerId echoed\", () => pm.expect(json.ownerId).to.eql(pm.collectionVariables.get(\"ownerId\") * 1));",
+                "pm.test(\"owner is the authenticated caller, not a client-supplied value\", () => pm.expect(json.ownerId).to.eql(pm.collectionVariables.get(\"myUserId\") * 1));",
                 "pm.test(\"taskCount is 0 for a new project\", () => pm.expect(json.taskCount).to.eql(0));",
                 "pm.collectionVariables.set(\"projectId\", json.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create Project - client-supplied ownerId is ignored",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/projects",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Impersonation Attempt\",\n  \"description\": \"trying to assert someone else's ownerId\",\n  \"ownerId\": 999999\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test(\"Status code is 201 - unknown field is silently ignored, not rejected\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.test(\"owner is still the authenticated caller, not the injected ownerId\", () => pm.expect(json.ownerId).to.eql(pm.collectionVariables.get(\"myUserId\") * 1));",
+                "pm.test(\"owner is NOT the injected value\", () => pm.expect(json.ownerId).to.not.eql(999999));"
               ]
             }
           }]
@@ -208,7 +238,7 @@
             "url": "{{baseUrl}}/api/projects",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Second Project\",\n  \"description\": \"Owned by a different user - used to prove cross-project task access is blocked\",\n  \"ownerId\": {{otherOwnerId}}\n}",
+              "raw": "{\n  \"name\": \"Second Project\",\n  \"description\": \"Same owner as the first - only used to prove a task addressed under the WRONG project id in the URL still 404s. Unrelated to ownership.\"\n}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -232,7 +262,7 @@
             "url": "{{baseUrl}}/api/projects",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"\",\n  \"description\": \"no name\",\n  \"ownerId\": {{ownerId}}\n}",
+              "raw": "{\n  \"name\": \"\",\n  \"description\": \"no name\"\n}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -257,7 +287,7 @@
             "url": "{{baseUrl}}/api/projects",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"   Sprint 1   \",\n  \"description\": \"padded name\",\n  \"ownerId\": {{ownerId}}\n}",
+              "raw": "{\n  \"name\": \"   Sprint 1   \",\n  \"description\": \"padded name\"\n}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -269,54 +299,6 @@
                 "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));",
                 "const json = pm.response.json();",
                 "pm.test(\"errors.name reported\", () => pm.expect(json.errors).to.have.property(\"name\"));"
-              ]
-            }
-          }]
-        },
-        {
-          "name": "Create Project - missing ownerId (400)",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/projects",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"No Owner\"\n}",
-              "options": { "raw": { "language": "json" } }
-            }
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "pm.test(\"Status code is 400\", () => pm.response.to.have.status(400));",
-                "const json = pm.response.json();",
-                "pm.test(\"errors.ownerId reported\", () => pm.expect(json.errors).to.have.property(\"ownerId\"));"
-              ]
-            }
-          }]
-        },
-        {
-          "name": "Create Project - non-existent ownerId (404)",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/projects",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Ghost Owner\",\n  \"ownerId\": 999999\n}",
-              "options": { "raw": { "language": "json" } }
-            }
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));",
-                "const json = pm.response.json();",
-                "pm.test(\"detail mentions the missing user\", () => pm.expect(json.detail).to.include(\"999999\"));"
               ]
             }
           }]
@@ -362,7 +344,7 @@
           }]
         },
         {
-          "name": "Get Project By Id - not found (404)",
+          "name": "Get Project By Id - not found (403, Step 9.9 ownership guard)",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/projects/999999"
@@ -372,7 +354,7 @@
             "script": {
               "type": "text/javascript",
               "exec": [
-                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));",
+                "pm.test(\"Status code is 403, not 404 - ProjectGuard.isOwner() returns false (not NotFoundException) for a missing project, deliberately collapsing 'doesn't exist' and 'not yours' into the same response for a non-admin\", () => pm.response.to.have.status(403));",
                 "pm.test(\"Content-Type is application/problem+json\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\"));"
               ]
             }
@@ -398,7 +380,7 @@
                 "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
                 "const json = pm.response.json();",
                 "pm.test(\"name updated\", () => pm.expect(json.name).to.eql(\"Taskflow API v2\"));",
-                "pm.test(\"ownerId unchanged (not reassignable via update)\", () => pm.expect(json.ownerId).to.eql(pm.collectionVariables.get(\"ownerId\") * 1));"
+                "pm.test(\"ownerId unchanged (not reassignable via update)\", () => pm.expect(json.ownerId).to.eql(pm.collectionVariables.get(\"myUserId\") * 1));"
               ]
             }
           }]
@@ -426,7 +408,7 @@
           }]
         },
         {
-          "name": "Update Project - not found (404)",
+          "name": "Update Project - not found (403, Step 9.9 ownership guard)",
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -442,7 +424,7 @@
             "script": {
               "type": "text/javascript",
               "exec": [
-                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));"
+                "pm.test(\"Status code is 403, not 404 - same guard behavior as GET\", () => pm.response.to.have.status(403));"
               ]
             }
           }]
@@ -599,7 +581,7 @@
           }]
         },
         {
-          "name": "Create Task - project not found (404)",
+          "name": "Create Task - project not found (403, Step 9.9 ownership guard)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -615,7 +597,7 @@
             "script": {
               "type": "text/javascript",
               "exec": [
-                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));"
+                "pm.test(\"Status code is 403 - @projectGuard.isOwner(#projectId, ...) runs before the service layer's own 404 check and returns false for a missing project\", () => pm.response.to.have.status(403));"
               ]
             }
           }]
@@ -971,7 +953,7 @@
           }]
         },
         {
-          "name": "Get Deleted Project (404)",
+          "name": "Get Deleted Project (403, Step 9.9 ownership guard)",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/projects/{{projectId}}"
@@ -981,7 +963,7 @@
             "script": {
               "type": "text/javascript",
               "exec": [
-                "pm.test(\"Status code is 404\", () => pm.response.to.have.status(404));"
+                "pm.test(\"Status code is 403, not 404 - the project no longer exists, same guard behavior as any other missing id\", () => pm.response.to.have.status(403));"
               ]
             }
           }]

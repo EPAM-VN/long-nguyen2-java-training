@@ -6,6 +6,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -45,6 +46,17 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                 "A record with the same unique value already exists.");
+    }
+
+    // @PreAuthorize denial throws AuthorizationDeniedException, a subclass
+    // of this - without a handler for it, the catch-all below intercepts it
+    // first (it's thrown from inside the controller method invocation, same
+    // as a normal exception, not from the filter chain where
+    // ExceptionTranslationFilter would otherwise translate it to 403 on its
+    // own) and turns a legitimate "access denied" into a generic 500.
+    @ExceptionHandler(AccessDeniedException.class)
+    public ProblemDetail handleAccessDenied(AccessDeniedException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "Access is denied.");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

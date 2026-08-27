@@ -1,53 +1,43 @@
 package epam.training.demo.security;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Date;
 import java.util.Set;
 
+// Only mints tokens now - verifying/parsing an incoming token is entirely
+// Spring's job (JwtDecoder, wired directly into oauth2ResourceServer in
+// SecurityConfig) since JwtAuthFilter was deleted in Step 9.8. This class
+// no longer needs a JwtDecoder itself: nothing here calls decode().
 @Service
 public class JwtService {
 
     private final JwtProperties jwtProperties;
-    private final SecretKey key;
+    private final JwtEncoder jwtEncoder;
 
-    public JwtService(JwtProperties jwtProperties) {
+    public JwtService(JwtProperties jwtProperties, JwtEncoder jwtEncoder) {
         this.jwtProperties = jwtProperties;
-        this.key = Keys.hmacShaKeyFor(jwtProperties.secret().getBytes(StandardCharsets.UTF_8));
+        this.jwtEncoder = jwtEncoder;
     }
 
     public String generateToken(String username, Set<String> roles) {
         Instant now = Instant.now();
         Instant expiration = now.plus(jwtProperties.expiration());
 
-        return Jwts.builder()
+        JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(username)
                 .claim("roles", roles)
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(expiration))
-                .signWith(key)
-                .compact();
-    }
+                .issuedAt(now)
+                .expiresAt(expiration)
+                .build();
 
-    // Verifies signature and expiration and returns the claims. Deliberately
-    // doesn't catch ExpiredJwtException/SignatureException/etc. - the filter
-    // built in 9.5 is what decides how a bad token should be handled (401
-    // response, which error message, whether to log it), not this class.
-    public Claims parseToken(String token) {
-        return Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-    }
+        JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
 
-    public String extractUsername(String token) {
-        return parseToken(token).getSubject();
+        return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
 }

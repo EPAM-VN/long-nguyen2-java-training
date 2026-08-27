@@ -5,6 +5,7 @@ import epam.training.demo.project.dto.ProjectCreateRequest;
 import epam.training.demo.project.dto.ProjectUpdateRequest;
 import epam.training.demo.user.User;
 import epam.training.demo.user.UserRepository;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,9 +24,19 @@ public class ProjectService {
         this.userRepository = userRepository;
     }
 
+    // Query-level filtering, not @PreAuthorize: an annotation can gate
+    // whether this endpoint is reachable at all, but it can't decide which
+    // rows come back - a non-admin only ever sees their own projects, an
+    // admin sees everything.
     @Transactional(readOnly = true)
-    public List<Project> findAll() {
-        return projectRepository.findAllWithTasks();
+    public List<Project> findAll(Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+
+        if (isAdmin) {
+            return projectRepository.findAllWithTasks();
+        }
+        return projectRepository.findAllWithTasksByOwnerUsername(authentication.getName());
     }
 
     @Transactional(readOnly = true)
@@ -34,10 +45,14 @@ public class ProjectService {
                 .orElseThrow(() -> new NotFoundException("Project %d not found".formatted(id)));
     }
 
+    // Owner is always the authenticated caller, never a client-supplied id
+    // (see ProjectCreateRequest) - a real admin-on-behalf-of flow would be
+    // a distinct, explicitly hasRole('ADMIN')-gated endpoint, not a body
+    // field on the default create path.
     @Transactional
-    public Project create(ProjectCreateRequest request) {
-        User owner = userRepository.findById(request.ownerId())
-                .orElseThrow(() -> new NotFoundException("User %d not found".formatted(request.ownerId())));
+    public Project create(ProjectCreateRequest request, Authentication authentication) {
+        User owner = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new NotFoundException("User '%s' not found".formatted(authentication.getName())));
 
         Project project = new Project();
         project.setName(request.name());
@@ -60,10 +75,10 @@ public class ProjectService {
         projectRepository.deleteById(id);
     }
 
-    public List<Project> createBatchUnsafe(List<ProjectCreateRequest> requests) {
+    public List<Project> createBatchUnsafe(List<ProjectCreateRequest> requests, Authentication authentication) {
         List<Project> created = new ArrayList<>();
         for (ProjectCreateRequest request : requests) {
-            created.add(create(request));
+            created.add(create(request, authentication));
         }
         throw new RuntimeException(
                 "createBatchUnsafe: unconditional failure after processing %d requests".formatted(requests.size()));

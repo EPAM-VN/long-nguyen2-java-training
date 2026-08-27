@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,6 +37,11 @@ public class TaskController {
         this.projectService = projectService;
     }
 
+    // These five endpoints only have projectId in the path - no taskId to
+    // check a task's own ownership against, so the guard checks ownership
+    // of the parent project instead (@taskGuard.isOwner is for the two
+    // endpoints below that actually address a single task).
+    @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#projectId, authentication)")
     @GetMapping
     public Page<TaskResponse> getAll(@PathVariable Long projectId,
                                       @RequestParam(required = false) TaskStatus status,
@@ -46,12 +52,14 @@ public class TaskController {
                 .map(TaskResponse::from);
     }
 
+    @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#projectId, authentication)")
     @GetMapping("/status-counts")
     public List<TaskStatusCount> getStatusCounts(@PathVariable Long projectId) {
         projectService.findById(projectId);
         return taskRepository.countByStatusForProject(projectId);
     }
 
+    @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#projectId, authentication)")
     @GetMapping("/search")
     public List<TaskResponse> search(@PathVariable Long projectId, @RequestParam String keyword) {
         projectService.findById(projectId);
@@ -60,12 +68,14 @@ public class TaskController {
                 .toList();
     }
 
+    @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#projectId, authentication)")
     @GetMapping("/summary")
     public List<TaskSummary> getSummary(@PathVariable Long projectId) {
         projectService.findById(projectId);
         return taskRepository.findByProjectId(projectId, TaskSummary.class);
     }
 
+    @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#projectId, authentication)")
     @PostMapping
     public ResponseEntity<TaskResponse> create(@PathVariable Long projectId,
                                                 @Valid @RequestBody TaskCreateRequest request) {
@@ -77,6 +87,7 @@ public class TaskController {
         return ResponseEntity.created(location).body(TaskResponse.from(created));
     }
 
+    @PreAuthorize("hasRole('ADMIN') or @taskGuard.isOwner(#taskId, authentication)")
     @PutMapping("/{taskId}")
     public TaskResponse update(@PathVariable Long projectId,
                                 @PathVariable Long taskId,
@@ -84,6 +95,7 @@ public class TaskController {
         return TaskResponse.from(taskService.update(projectId, taskId, request));
     }
 
+    @PreAuthorize("hasRole('ADMIN') or @taskGuard.isOwner(#taskId, authentication)")
     @DeleteMapping("/{taskId}")
     public ResponseEntity<Void> delete(@PathVariable Long projectId, @PathVariable Long taskId) {
         taskService.delete(projectId, taskId);
