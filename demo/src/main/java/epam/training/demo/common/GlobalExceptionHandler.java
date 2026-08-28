@@ -12,6 +12,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -70,6 +71,21 @@ public class GlobalExceptionHandler {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
         problemDetail.setProperty("errors", errors);
         return problemDetail;
+    }
+
+    // A bad enum/number/etc. in a @RequestParam or @PathVariable (e.g.
+    // ?status=BANANA against TaskStatus) throws this during argument
+    // resolution, before the controller method body - and before
+    // @PreAuthorize ever runs. Spring MVC would normally answer that with
+    // its own 400 by default, but the catch-all below intercepts anything
+    // without a more specific handler first (same shadowing pattern as
+    // AccessDeniedException above), turning a client input error into a
+    // generic 500. Found by writing exactly this case as a controller
+    // test and watching it fail.
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                "Invalid value for parameter '%s'.".formatted(ex.getName()));
     }
 
     @ExceptionHandler(Exception.class)

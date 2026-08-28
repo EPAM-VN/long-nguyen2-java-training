@@ -1,0 +1,2 @@
+jwt:
+  secret: test-secret-key-obviously-fake-but-32-chars-plus

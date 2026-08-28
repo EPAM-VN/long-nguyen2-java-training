@@ -62,6 +62,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -97,6 +101,38 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-docker-compose</artifactId>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Not managed by the Spring Boot BOM - pinned explicitly, same
+             situation as jjwt back in Day 9. org.wiremock:wiremock-junit5
+             doesn't exist as a separate artifact at 3.13.2 (only from
+             4.0.0-beta.x onward) - at 3.13.2 the JUnit5 extension
+             (WireMockExtension, @WireMockTest) ships bundled inside
+             org.wiremock:wiremock, confirmed by inspecting the actual jar
+             contents. That modular core artifact alone isn't enough
+             either, though: it has no embedded HTTP server implementation
+             bundled (fails at runtime with FatalStartupException: "Jetty
+             11 is not present") - wiremock-standalone is the fat jar that
+             actually bundles Jetty and everything else needed to run. -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.13.2</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

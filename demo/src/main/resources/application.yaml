@@ -20,3 +20,11 @@ taskflow:
 jwt:
   secret: ${JWT_SECRET}
   expiration: 1h
+
+# Placeholder host - nothing is actually listening here yet, and nothing in
+# this app calls ProductivityTipClient yet either. Step W.2 points this at
+# WireMock instead.
+productivity-tips:
+  base-url: http://localhost:9999
+  connect-timeout: 2s
+  read-timeout: 2s
