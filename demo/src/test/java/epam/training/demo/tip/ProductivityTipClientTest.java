@@ -2,6 +2,7 @@ package epam.training.demo.tip;
 
 import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -35,14 +36,22 @@ class ProductivityTipClientTest {
 
     private static final Duration TEST_TIMEOUT = Duration.ofMillis(500);
 
+    // A fresh, real SimpleMeterRegistry per test (via newClient()) - no
+    // Spring context needed to get one, unlike everywhere else MeterRegistry
+    // is used in this app. Kept as a field so tests that want to assert on
+    // recorded metrics can reach the same instance the client was built
+    // with.
+    private SimpleMeterRegistry meterRegistry;
+
     private ProductivityTipClient newClient() {
+        meterRegistry = new SimpleMeterRegistry();
         HttpClientSettings settings = HttpClientSettings.defaults().withTimeouts(TEST_TIMEOUT, TEST_TIMEOUT);
         ClientHttpRequestFactory requestFactory = ClientHttpRequestFactoryBuilder.detect().build(settings);
         RestClient restClient = RestClient.builder()
                 .baseUrl(wireMock.baseUrl())
                 .requestFactory(requestFactory)
                 .build();
-        return new ProductivityTipClient(restClient);
+        return new ProductivityTipClient(restClient, meterRegistry);
     }
 
     @Test
@@ -57,6 +66,9 @@ class ProductivityTipClientTest {
 
         assertThat(result).contains(new ProductivityTip("Take a short walk every hour", "wellness"));
         wireMock.verify(getRequestedFor(urlEqualTo("/tips/random")));
+
+        assertThat(meterRegistry.get("productivity.tip.fetch").tag("outcome", "success").timer().count())
+                .isEqualTo(1);
     }
 
     @Test
@@ -67,6 +79,8 @@ class ProductivityTipClientTest {
         Optional<ProductivityTip> result = newClient().getRandomTip();
 
         assertThat(result).isEmpty();
+        assertThat(meterRegistry.get("productivity.tip.fetch").tag("outcome", "error").timer().count())
+                .isEqualTo(1);
     }
 
     @Test

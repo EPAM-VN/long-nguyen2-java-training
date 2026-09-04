@@ -10,6 +10,7 @@ import epam.training.demo.task.dto.TaskCreateRequest;
 import epam.training.demo.user.Role;
 import epam.training.demo.user.User;
 import epam.training.demo.user.UserRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -53,6 +54,9 @@ class TaskAuditListenerTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     private User owner;
     private Project project;
@@ -104,6 +108,12 @@ class TaskAuditListenerTest {
     @DisplayName("create() commits, then the audit listener runs asynchronously on taskAuditExecutor - not on the caller's thread")
     void create_firesAsyncAuditListenerAfterCommit() {
         String callingThreadName = Thread.currentThread().getName();
+        // MeterRegistry is a Spring-managed singleton, potentially shared
+        // (and its counters accumulated) across other test classes whose
+        // application context Spring's test framework happens to cache and
+        // reuse - a before/after delta is robust regardless of what ran
+        // earlier; asserting count() == 1 outright would not be.
+        double countBefore = meterRegistry.counter("task.created").count();
 
         TaskCreateRequest request = new TaskCreateRequest("Audit me", null, null, null, null, null);
         Task created = taskService.create(project.getId(), request);
@@ -116,6 +126,8 @@ class TaskAuditListenerTest {
                 .contains(project.getId().toString());
         assertThat(event.getThreadName()).startsWith("task-audit-");
         assertThat(event.getThreadName()).isNotEqualTo(callingThreadName);
+
+        assertThat(meterRegistry.counter("task.created").count()).isEqualTo(countBefore + 1);
     }
 
     // @TransactionalEventListener(AFTER_COMMIT) + @Async means there's no

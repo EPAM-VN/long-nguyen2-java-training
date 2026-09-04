@@ -9,6 +9,7 @@ import epam.training.demo.user.User;
 import epam.training.demo.user.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,8 +32,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 // thing under test here (which URL pattern in SecurityConfig a request
 // matches, and whether show-details actually reads the caller's role) only
 // exists in the real SecurityFilterChain, not in any @WebMvcTest slice.
+//
+// @AutoConfigureMetrics: Spring Boot Test disables metrics EXPORT by
+// default under @SpringBootTest (management.defaults.metrics.export.enabled
+// = false, wired in by spring-boot-starter-actuator-test) - the safe
+// default so a test run never accidentally pushes real metrics to a real
+// backend. That's a narrower thing than "does MeterRegistry record
+// anything" (counters/timers still work fine without this, which is why
+// TaskAuditListenerTest/TaskConflictLogServiceIntegrationTest/
+// ProductivityTipClientTest never needed it) - but
+// PrometheusMetricsExportAutoConfiguration itself, the endpoint under test
+// below, is gated behind that same export-enabled condition and simply
+// never registers without this annotation, producing a 404-turned-500
+// (NoResourceFoundException falling through to the catch-all handler) that
+// looks nothing like a security failure.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
+@AutoConfigureMetrics
 @ActiveProfiles("test")
 @Import(TestcontainersConfiguration.class)
 class ActuatorSecurityTest {
@@ -151,5 +167,39 @@ class ActuatorSecurityTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat((Iterable<String>) response.getBody().get("names")).isNotEmpty();
+    }
+
+    // /actuator/prometheus falls under the same "/actuator/**" -> ADMIN
+    // rule as info/metrics (SecurityConfig) - no separate matcher needed,
+    // this just confirms it wasn't accidentally left off that rule's scope.
+    @Test
+    void prometheus_noAuth_returns401() {
+        ResponseEntity<String> response = withAuth("/actuator/prometheus", null, String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void prometheus_asPlainUser_returns403() {
+        String userToken = registerAndLogin("user", Set.of(Role.USER));
+
+        ResponseEntity<String> response = withAuth("/actuator/prometheus", userToken, String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void prometheus_asAdmin_returnsTextExpositionFormat() {
+        String adminToken = registerAndLogin("admin", Set.of(Role.USER, Role.ADMIN));
+
+        ResponseEntity<String> response = withAuth("/actuator/prometheus", adminToken, String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // jvm_memory_used_bytes is one of Micrometer's built-in JVM
+        // metrics, auto-registered the moment spring-boot-starter-actuator
+        // is on the classpath - present regardless of anything this app's
+        // own code does, so its presence proves this is real Prometheus
+        // text-exposition output, not an empty/broken registry.
+        assertThat(response.getBody()).contains("jvm_memory_used_bytes");
     }
 }

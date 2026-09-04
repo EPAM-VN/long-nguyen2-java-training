@@ -69,6 +69,18 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-restclient</artifactId>
         </dependency>
+        <!-- micrometer-core (the MeterRegistry API used throughout
+             task/tip code) already comes transitively from
+             spring-boot-starter-actuator - this is only the Prometheus
+             *format* adapter, what turns those meters into the
+             text-exposition format /actuator/prometheus serves. Version is
+             managed by the Spring Boot BOM like every other
+             spring-boot-starter-* dependency above, no explicit pin
+             needed. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.postgresql</groupId>

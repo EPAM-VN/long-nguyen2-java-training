@@ -1,5 +1,6 @@
 package epam.training.demo.task;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -11,6 +12,12 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class TaskAuditListener {
 
     private static final Logger log = LoggerFactory.getLogger(TaskAuditListener.class);
+
+    private final MeterRegistry meterRegistry;
+
+    public TaskAuditListener(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
 
     // AFTER_COMMIT, not a plain @EventListener: TaskService.create()
     // publishes this event from inside its own @Transactional method,
@@ -34,6 +41,25 @@ public class TaskAuditListener {
     @Async("taskAuditExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onTaskCreated(TaskCreatedEvent event) {
+        // No per-task/per-project tag here on purpose - project/task ids
+        // are effectively unbounded (a new one exists for every row ever
+        // created), and a Micrometer tag value becomes a distinct time
+        // series per unique value seen. Tagging by an unbounded id is
+        // exactly how a metrics backend's cardinality blows up; a plain,
+        // untagged counter (just "how many tasks total") is the safe
+        // choice here.
+        //
+        // Incremented BEFORE the log line, not after - a test observing
+        // this event happen (e.g. polling for the log line via a Logback
+        // ListAppender, as TaskAuditListenerTest does) runs on a different
+        // thread than this method. Logging first would let that test
+        // observe "the log line exists" while "the counter was
+        // incremented" is still just a program-order guarantee on THIS
+        // thread, with no happens-before edge yet connecting the two -
+        // technically racy. Incrementing first means the log line (which
+        // the test synchronizes on through the appender's own internal
+        // lock) can never become visible before the increment is.
+        meterRegistry.counter("task.created").increment();
         log.info("[audit] task {} '{}' created in project {}",
                 event.taskId(), event.title(), event.projectId());
     }

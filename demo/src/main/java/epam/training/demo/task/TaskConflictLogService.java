@@ -1,5 +1,6 @@
 package epam.training.demo.task;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +20,11 @@ import java.time.Instant;
 public class TaskConflictLogService {
 
     private final TaskConflictLogRepository taskConflictLogRepository;
+    private final MeterRegistry meterRegistry;
 
-    public TaskConflictLogService(TaskConflictLogRepository taskConflictLogRepository) {
+    public TaskConflictLogService(TaskConflictLogRepository taskConflictLogRepository, MeterRegistry meterRegistry) {
         this.taskConflictLogRepository = taskConflictLogRepository;
+        this.meterRegistry = meterRegistry;
     }
 
     // REQUIRES_NEW: TaskService.update() calls this from inside its own
@@ -45,5 +48,12 @@ public class TaskConflictLogService {
         conflictLog.setActualVersion(actualVersion);
         conflictLog.setOccurredAt(Instant.now());
         taskConflictLogRepository.save(conflictLog);
+        // Plain in-memory counter increment, unlike the save() above - it
+        // has nothing to do with the surrounding REQUIRES_NEW transaction
+        // (Micrometer counters aren't transactional at all, so there's
+        // nothing here to roll back or commit either way) and, same
+        // cardinality reasoning as TaskAuditListener's task.created, no
+        // per-task tag.
+        meterRegistry.counter("task.conflict").increment();
     }
 }

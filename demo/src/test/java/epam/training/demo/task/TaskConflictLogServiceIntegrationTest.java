@@ -7,6 +7,7 @@ import epam.training.demo.task.dto.TaskUpdateRequest;
 import epam.training.demo.user.Role;
 import epam.training.demo.user.User;
 import epam.training.demo.user.UserRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -58,6 +59,9 @@ class TaskConflictLogServiceIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private MeterRegistry meterRegistry;
+
     private User owner;
     private Project project;
     private Task task;
@@ -102,12 +106,20 @@ class TaskConflictLogServiceIntegrationTest {
     @Test
     @DisplayName("update() with a stale version rolls back its own transaction, but the REQUIRES_NEW conflict log still commits")
     void update_staleVersion_conflictLogSurvivesCallersRollback() {
+        // Delta, not an absolute count - MeterRegistry is a shared
+        // singleton whose application context Spring's test framework may
+        // cache and reuse across other test classes, same reasoning as
+        // TaskAuditListenerTest's task.created assertion.
+        double countBefore = meterRegistry.counter("task.conflict").count();
+
         Long staleVersion = task.getVersion() + 1;
         TaskUpdateRequest request = new TaskUpdateRequest(
                 "New title", null, TaskStatus.DONE, Priority.LOW, null, null, staleVersion);
 
         assertThatThrownBy(() -> taskService.update(project.getId(), task.getId(), request))
                 .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+        assertThat(meterRegistry.counter("task.conflict").count()).isEqualTo(countBefore + 1);
 
         // Read back through a completely separate repository call/
         // transaction, after update()'s has already failed and rolled back
