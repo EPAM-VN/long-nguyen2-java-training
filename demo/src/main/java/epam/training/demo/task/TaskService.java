@@ -7,6 +7,7 @@ import epam.training.demo.task.dto.TaskCreateRequest;
 import epam.training.demo.task.dto.TaskUpdateRequest;
 import epam.training.demo.user.User;
 import epam.training.demo.user.UserRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -22,11 +23,14 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final ProjectService projectService;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public TaskService(TaskRepository taskRepository, ProjectService projectService, UserRepository userRepository) {
+    public TaskService(TaskRepository taskRepository, ProjectService projectService, UserRepository userRepository,
+                        ApplicationEventPublisher eventPublisher) {
         this.taskRepository = taskRepository;
         this.projectService = projectService;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -57,7 +61,12 @@ public class TaskService {
         task.setCreatedAt(Instant.now());
         task.setProject(project);
 
-        return taskRepository.save(task);
+        Task saved = taskRepository.save(task);
+        // IDENTITY generation (Task.id) flushes the insert immediately, so
+        // saved.getId() is already populated here, before this method (and
+        // its transaction) returns.
+        eventPublisher.publishEvent(new TaskCreatedEvent(saved.getId(), projectId, saved.getTitle(), Instant.now()));
+        return saved;
     }
 
     @Transactional

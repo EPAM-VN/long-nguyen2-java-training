@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -41,6 +42,9 @@ class TaskServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private TaskService taskService;
@@ -112,6 +116,15 @@ class TaskServiceTest {
         assertThat(saved.getProject()).isSameAs(project);
         assertThat(saved.getCreatedAt()).isBetween(before, after);
         assertThat(result).isSameAs(saved);
+
+        // Proves create() publishes a TaskCreatedEvent for the saved task -
+        // it says nothing about the listener side (async execution,
+        // AFTER_COMMIT timing), which needs a real transaction/executor;
+        // see TaskAuditListenerTest for that.
+        ArgumentCaptor<TaskCreatedEvent> eventCaptor = ArgumentCaptor.forClass(TaskCreatedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().title()).isEqualTo("Write tests");
+        assertThat(eventCaptor.getValue().projectId()).isEqualTo(1L);
     }
 
     @Test
