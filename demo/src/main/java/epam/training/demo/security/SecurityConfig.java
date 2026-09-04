@@ -101,6 +101,17 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Deliberately two rules, most-specific first: health
+                        // must be reachable with no token at all (that's the
+                        // point of a liveness/readiness probe - it runs
+                        // before anything else can prove it's up), while the
+                        // rest of the actuator surface (info, metrics) is
+                        // gated to ADMIN. show-details on health (see
+                        // application.yaml) is a second, independent gate on
+                        // top of this - reachability here is not the same as
+                        // seeing component details.
+                        .requestMatchers("/actuator/health/**").permitAll()
+                        .requestMatchers("/actuator/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 // Both give a filter-chain-level denial the same
                 // application/problem+json shape GlobalExceptionHandler

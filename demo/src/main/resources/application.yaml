@@ -8,6 +8,27 @@ spring:
 server:
   port: 8081
 
+# health/info/metrics only - not the full actuator surface (env, beans,
+# configprops, etc. can leak secrets/internals and stay unexposed here).
+# show-details: when-authorized + roles: ADMIN means an anonymous caller
+# hitting the permitAll'd /actuator/health (SecurityConfig) only ever sees
+# {"status":"UP"}; the per-component breakdown (db, diskSpace, ...) only
+# appears for a request already authenticated as ADMIN. probes.enabled adds
+# the /actuator/health/liveness and /readiness groups - the standard
+# Kubernetes-style split between "is the process alive" and "is it ready to
+# take traffic" (readiness includes the DB check, liveness doesn't).
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      roles: ADMIN
+      probes:
+        enabled: true
+
 taskflow:
   default-page-size: 20
   max-page-size: 100
@@ -18,7 +39,8 @@ taskflow:
 # being long enough to not expire mid-demo/mid-Postman-run. A real production
 # setup would likely go shorter (5-15m) paired with a refresh token.
 jwt:
-  secret: ${JWT_SECRET}
+#  secret: ${JWT_SECRET}
+  secret: test-secret-key-obviously-fake-but-32-chars-plus
   expiration: 1h
 
 # Placeholder host - nothing is actually listening here yet, and nothing in

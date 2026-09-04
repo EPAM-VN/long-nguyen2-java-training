@@ -141,6 +141,24 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <!-- Writes META-INF/build-info.properties (artifact,
+                         version, build time) into the jar. Actuator's
+                         InfoContributor auto-detects it and serves it from
+                         /actuator/info - without this goal that endpoint
+                         just returns {}. Phase overridden to
+                         generate-resources (the goal's default is
+                         prepare-package): prepare-package runs AFTER the
+                         test phase in Maven's lifecycle, so `mvnw test`
+                         alone would never produce the file in time for a
+                         test asserting on /actuator/info's content. -->
+                    <execution>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>build-info</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

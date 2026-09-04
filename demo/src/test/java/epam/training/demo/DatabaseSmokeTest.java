@@ -5,9 +5,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.util.TimeZone;
 
@@ -18,11 +22,31 @@ import static org.assertj.core.api.Assertions.assertThat;
 // this test - proving Flyway's real V1-V5 migrations run cleanly against a
 // real Postgres container, not whatever an embedded database happens to
 // accept.
+//
+// Deliberately NOT @Import(TestcontainersConfiguration.class): that class's
+// container is a static singleton shared with every other test class in the
+// suite (including full-stack ones like ProjectOwnershipE2ETest and
+// ActuatorSecurityTest that register real users against it), so "fresh
+// container is empty" would only hold by accident of alphabetical test
+// class ordering - it broke the moment a class sorting before this one
+// started registering users first. This test gets its own private
+// container instead, so "fresh" is actually guaranteed rather than
+// order-dependent.
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(TestcontainersConfiguration.class)
+@Import(DatabaseSmokeTest.OwnContainerConfiguration.class)
 @ActiveProfiles("test")
 class DatabaseSmokeTest {
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class OwnContainerConfiguration {
+
+        @Bean
+        @ServiceConnection
+        PostgreSQLContainer postgresContainer() {
+            return new PostgreSQLContainer("postgres:17");
+        }
+    }
 
     // DemoApplication has this same call in a static initializer, but that
     // never runs here: @DataJpaTest resolves DemoApplication as its
