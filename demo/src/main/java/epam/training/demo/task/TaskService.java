@@ -24,13 +24,15 @@ public class TaskService {
     private final ProjectService projectService;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final TaskConflictLogService taskConflictLogService;
 
     public TaskService(TaskRepository taskRepository, ProjectService projectService, UserRepository userRepository,
-                        ApplicationEventPublisher eventPublisher) {
+                        ApplicationEventPublisher eventPublisher, TaskConflictLogService taskConflictLogService) {
         this.taskRepository = taskRepository;
         this.projectService = projectService;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
+        this.taskConflictLogService = taskConflictLogService;
     }
 
     @Transactional(readOnly = true)
@@ -74,6 +76,11 @@ public class TaskService {
         Task task = findByIdForProject(projectId, taskId);
 
         if (!request.version().equals(task.getVersion())) {
+            // This method's own transaction is about to roll back around
+            // the exception thrown below - recordConflict() runs in its own
+            // REQUIRES_NEW transaction precisely so this row isn't rolled
+            // back along with it.
+            taskConflictLogService.recordConflict(taskId, projectId, request.version(), task.getVersion());
             throw new ObjectOptimisticLockingFailureException(Task.class, taskId);
         }
 

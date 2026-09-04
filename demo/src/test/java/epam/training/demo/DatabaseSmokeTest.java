@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 // Replace.NONE: without it, @DataJpaTest swaps in an embedded in-memory
 // database by default, which would silently defeat the entire point of
-// this test - proving Flyway's real V1-V5 migrations run cleanly against a
+// this test - proving Flyway's real V1-V6 migrations run cleanly against a
 // real Postgres container, not whatever an embedded database happens to
 // accept.
 //
@@ -67,11 +67,11 @@ class DatabaseSmokeTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void freshContainerIsEmptyAndAllFiveMigrationsRan() {
+    void freshContainerIsEmptyAndAllSixMigrationsRan() {
         assertThat(userRepository.count()).isZero();
 
         Integer migrationCount = jdbcTemplate.queryForObject(
                 "select count(*) from flyway_schema_history", Integer.class);
-        assertThat(migrationCount).isEqualTo(5);
+        assertThat(migrationCount).isEqualTo(6);
     }
 }

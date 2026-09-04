@@ -46,6 +46,9 @@ class TaskServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private TaskConflictLogService taskConflictLogService;
+
     @InjectMocks
     private TaskService taskService;
 
@@ -178,6 +181,14 @@ class TaskServiceTest {
                 .isInstanceOf(ObjectOptimisticLockingFailureException.class);
 
         verify(taskRepository, never()).save(any());
+        // Proves update() calls out to record the conflict at all, and with
+        // the right values - it can't prove REQUIRES_NEW's actual point
+        // (that this write survives the caller's transaction rolling back),
+        // since a mocked TaskConflictLogService has no real transaction to
+        // roll back in the first place; that needs a real
+        // EntityManager/TransactionManager - see
+        // TaskConflictLogServiceIntegrationTest.
+        verify(taskConflictLogService).recordConflict(5L, 1L, 2L, 3L);
     }
 
     @Test
