@@ -28,6 +28,9 @@
     </scm>
     <properties>
         <java.version>21</java.version>
+        <!-- Not managed by the Spring Boot BOM, same situation as
+             wiremock-standalone below - pinned explicitly. -->
+        <mapstruct.version>1.6.3</mapstruct.version>
     </properties>
     <dependencies>
         <dependency>
@@ -76,6 +79,20 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
+        </dependency>
+        <!-- mapstruct-processor (the annotation processor that generates
+             XxxMapperImpl classes) is intentionally NOT listed here as a
+             dependency - only wired into maven-compiler-plugin's
+             annotationProcessorPaths below. Adding it as a normal
+             dependency would pull its own transitive deps onto the
+             compile/runtime classpath for no reason; only the `mapstruct`
+             annotations/interfaces (@Mapper, @Mapping, ...) that the
+             generated code and this module's own @Mapper interfaces
+             reference at compile time need to be a real dependency. -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -171,10 +188,31 @@
                             <goal>compile</goal>
                         </goals>
                         <configuration>
+                            <!-- Order matters. Task/Project/User only have
+                                 getters because Lombok's @Getter generates
+                                 them - without lombok-mapstruct-binding,
+                                 mapstruct-processor runs in an annotation
+                                 processing round where those getters don't
+                                 exist yet as far as it can see, and every
+                                 @Mapper referencing task.getTitle() etc.
+                                 fails to compile with "unknown property"
+                                 errors. lombok-mapstruct-binding is what
+                                 makes the two processors cooperate within
+                                 the same round instead of racing. -->
                             <annotationProcessorPaths>
                                 <path>
                                     <groupId>org.projectlombok</groupId>
                                     <artifactId>lombok</artifactId>
+                                </path>
+                                <path>
+                                    <groupId>org.projectlombok</groupId>
+                                    <artifactId>lombok-mapstruct-binding</artifactId>
+                                    <version>0.2.0</version>
+                                </path>
+                                <path>
+                                    <groupId>org.mapstruct</groupId>
+                                    <artifactId>mapstruct-processor</artifactId>
+                                    <version>${mapstruct.version}</version>
                                 </path>
                             </annotationProcessorPaths>
                         </configuration>

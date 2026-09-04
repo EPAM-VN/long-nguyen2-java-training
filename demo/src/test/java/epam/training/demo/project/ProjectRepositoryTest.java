@@ -101,7 +101,7 @@ class ProjectRepositoryTest {
         // default, and this reloaded proxy was never touched before
         // detach - so there is no initialized collection to read, and no
         // session left to fetch it from. This is exactly the failure
-        // ProjectResponse.from(project) or any other post-transaction
+        // ProjectMapper.toResponse(project) or any other post-transaction
         // access to an un-fetched association would hit in production,
         // which is why every repository method that actually needs
         // tasks/owner uses LEFT JOIN FETCH instead of a plain findById.

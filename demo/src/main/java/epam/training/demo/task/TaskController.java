@@ -30,11 +30,14 @@ public class TaskController {
     private final TaskRepository taskRepository;
     private final TaskService taskService;
     private final ProjectService projectService;
+    private final TaskMapper taskMapper;
 
-    public TaskController(TaskRepository taskRepository, TaskService taskService, ProjectService projectService) {
+    public TaskController(TaskRepository taskRepository, TaskService taskService, ProjectService projectService,
+                           TaskMapper taskMapper) {
         this.taskRepository = taskRepository;
         this.taskService = taskService;
         this.projectService = projectService;
+        this.taskMapper = taskMapper;
     }
 
     // These five endpoints only have projectId in the path - no taskId to
@@ -49,7 +52,7 @@ public class TaskController {
                                       @RequestParam(required = false) String keyword,
                                       Pageable pageable) {
         return taskService.findAll(projectId, status, priority, keyword, pageable)
-                .map(TaskResponse::from);
+                .map(taskMapper::toResponse);
     }
 
     @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#projectId, authentication)")
@@ -64,7 +67,7 @@ public class TaskController {
     public List<TaskResponse> search(@PathVariable Long projectId, @RequestParam String keyword) {
         projectService.findById(projectId);
         return taskRepository.searchByTitleForProject(projectId, keyword).stream()
-                .map(TaskResponse::from)
+                .map(taskMapper::toResponse)
                 .toList();
     }
 
@@ -84,7 +87,7 @@ public class TaskController {
                 .path("/{taskId}")
                 .buildAndExpand(created.getId())
                 .toUri();
-        return ResponseEntity.created(location).body(TaskResponse.from(created));
+        return ResponseEntity.created(location).body(taskMapper.toResponse(created));
     }
 
     @PreAuthorize("hasRole('ADMIN') or @taskGuard.isOwner(#taskId, authentication)")
@@ -92,7 +95,7 @@ public class TaskController {
     public TaskResponse update(@PathVariable Long projectId,
                                 @PathVariable Long taskId,
                                 @Valid @RequestBody TaskUpdateRequest request) {
-        return TaskResponse.from(taskService.update(projectId, taskId, request));
+        return taskMapper.toResponse(taskService.update(projectId, taskId, request));
     }
 
     @PreAuthorize("hasRole('ADMIN') or @taskGuard.isOwner(#taskId, authentication)")

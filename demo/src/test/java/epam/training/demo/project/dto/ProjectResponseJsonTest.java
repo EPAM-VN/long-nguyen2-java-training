@@ -17,11 +17,11 @@ class ProjectResponseJsonTest {
     @Autowired
     private JacksonTester<ProjectResponse> json;
 
-    // Constructed directly via the record constructor, never
-    // ProjectResponse.from(project) - that method dereferences a lazy
-    // owner and a lazy tasks collection that a bare `new Project()` doesn't
-    // have loaded, so calling it here would NPE for a reason unrelated to
-    // what this test is actually checking (JSON serialization).
+    // Constructed directly via the record constructor, never through
+    // ProjectMapper.toResponse(project) - this test only cares about
+    // ProjectResponse's own JSON shape, not about how a Project turns into
+    // one, so building the DTO directly keeps it independent of the mapper
+    // (and of a real, fully-associated Project entity) entirely.
     @Test
     void serializesAllFields() throws Exception {
         ProjectResponse response = new ProjectResponse(

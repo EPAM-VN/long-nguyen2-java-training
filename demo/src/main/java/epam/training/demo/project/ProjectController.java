@@ -25,9 +25,11 @@ import java.util.List;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final ProjectMapper projectMapper;
 
-    public ProjectController(ProjectService projectService) {
+    public ProjectController(ProjectService projectService, ProjectMapper projectMapper) {
         this.projectService = projectService;
+        this.projectMapper = projectMapper;
     }
 
     // hasRole('USER') alone is enough at the annotation level - every
@@ -40,14 +42,14 @@ public class ProjectController {
     @GetMapping
     public List<ProjectResponse> getAll(Authentication authentication) {
         return projectService.findAll(authentication).stream()
-                .map(ProjectResponse::from)
+                .map(projectMapper::toResponse)
                 .toList();
     }
 
     @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#id, authentication)")
     @GetMapping("/{id}")
     public ProjectResponse getById(@PathVariable Long id) {
-        return ProjectResponse.from(projectService.findById(id));
+        return projectMapper.toResponse(projectService.findById(id));
     }
 
     @PreAuthorize("hasRole('USER')")
@@ -59,13 +61,13 @@ public class ProjectController {
                 .path("/{id}")
                 .buildAndExpand(created.getId())
                 .toUri();
-        return ResponseEntity.created(location).body(ProjectResponse.from(created));
+        return ResponseEntity.created(location).body(projectMapper.toResponse(created));
     }
 
     @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#id, authentication)")
     @PutMapping("/{id}")
     public ProjectResponse update(@PathVariable Long id, @Valid @RequestBody ProjectUpdateRequest request) {
-        return ProjectResponse.from(projectService.update(id, request));
+        return projectMapper.toResponse(projectService.update(id, request));
     }
 
     @PreAuthorize("hasRole('ADMIN') or @projectGuard.isOwner(#id, authentication)")

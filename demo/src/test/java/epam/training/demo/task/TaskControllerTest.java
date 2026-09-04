@@ -49,9 +49,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // slice cannot prove what a real 401 body looks like
 // (ProblemDetailAuthenticationEntryPoint only exists in the full filter
 // chain) - that's Step 11.11's job.
+// TaskMapperImpl (MapStruct-generated) is imported directly, same reasoning
+// as ProjectControllerTest: it's a pure, dependency-free mapping function,
+// safe and more useful to use for real here than mocking it field-by-field.
 @WebMvcTest(TaskController.class)
 @ActiveProfiles("test")
-@Import({TaskControllerTest.MethodSecurityConfig.class, PaginationConfig.class})
+@Import({TaskControllerTest.MethodSecurityConfig.class, PaginationConfig.class, TaskMapperImpl.class})
 @EnableConfigurationProperties(TaskflowProperties.class)
 class TaskControllerTest {
 

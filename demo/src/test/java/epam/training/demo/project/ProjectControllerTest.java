@@ -44,9 +44,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // what an actual 401 (unauthenticated) response body looks like in this
 // app - that depends on ProblemDetailAuthenticationEntryPoint, which only
 // exists in the real filter chain. That's Step 11.11's job, not this one.
+// ProjectMapperImpl (MapStruct-generated) is imported directly, not
+// @MockitoBean'd - it's a pure, dependency-free mapping function, so using
+// the real generated implementation is both safe and more useful here than
+// mocking it: mocking would mean hand-stubbing every field of every
+// ProjectResponse this class asserts on instead of letting the real mapper
+// do it. @WebMvcTest only auto-configures web-layer beans (controllers,
+// advice, converters, ...), not arbitrary @Component beans like a mapper -
+// without this @Import, ProjectController's constructor would have nothing
+// to inject.
 @WebMvcTest(ProjectController.class)
 @ActiveProfiles("test")
-@Import(ProjectControllerTest.MethodSecurityConfig.class)
+@Import({ProjectControllerTest.MethodSecurityConfig.class, ProjectMapperImpl.class})
 class ProjectControllerTest {
 
     @TestConfiguration
@@ -63,11 +72,13 @@ class ProjectControllerTest {
     @MockitoBean(name = "projectGuard")
     private ProjectGuard projectGuard;
 
-    // ProjectResponse.from() dereferences project.getOwner().getId() and
-    // project.getTasks().size() - a bare `new Project()` returned from a
-    // mock NPEs for a reason that has nothing to do with whatever a given
-    // test is actually checking, so every stub returns a fully populated
-    // entity instead.
+    // ProjectMapper.toResponse() reads owner.id and tasks.size() - a bare
+    // `new Project()` returned from a mock would map to a ProjectResponse
+    // with a null ownerId and a 0 taskCount either way (MapStruct generates
+    // a null check before dereferencing owner), so this isn't about
+    // avoiding a crash. It's so assertions on ownerId/taskCount below are
+    // checking real, deliberately-chosen values instead of defaults that
+    // would pass by accident.
     private Project fullyPopulatedProject(Long id, String name, Long ownerId) {
         User owner = new User();
         owner.setId(ownerId);
@@ -133,13 +144,19 @@ class ProjectControllerTest {
     //    @EnableMethodSecurity itself (not @Import) from
     //    MethodSecurityConfig and re-ran: NOW it failed with 500 again,
     //    but for yet another reason - a NullPointerException from
-    //    ProjectResponse.from(null), because with @PreAuthorize never
-    //    evaluated at all, getById() ran completely unguarded and called
-    //    projectService.findById(1L), which this test deliberately never
-    //    stubs (a correctly-guarded request should never reach it) - so
-    //    Mockito's default null return blew up downstream instead of a
-    //    clean 200. Restoring @EnableMethodSecurity turned this back to
-    //    green for the right reason.
+    //    ProjectResponse.from(null) (the hand-written factory method this
+    //    class had before the MapStruct migration), because with
+    //    @PreAuthorize never evaluated at all, getById() ran completely
+    //    unguarded and called projectService.findById(1L), which this test
+    //    deliberately never stubs (a correctly-guarded request should never
+    //    reach it) - so Mockito's default null return blew up downstream
+    //    instead of a clean 200. Restoring @EnableMethodSecurity turned
+    //    this back to green for the right reason. Note for anyone
+    //    reproducing this today: ProjectMapper.toResponse(null) (the
+    //    MapStruct-generated replacement) returns null instead of throwing,
+    //    so this exact repro no longer applies verbatim - the underlying
+    //    point (getById() is unguarded without @EnableMethodSecurity) still
+    //    stands, just via a different symptom.
     @Test
     @WithMockUser(authorities = "ROLE_USER")
     void getById_asNonOwner_returns403() throws Exception {

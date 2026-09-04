@@ -18,15 +18,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final UserMapper userMapper;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, UserMapper userMapper) {
         this.authService = authService;
+        this.userMapper = userMapper;
     }
 
     @PostMapping("/register")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
         User created = authService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(created));
+        return ResponseEntity.status(HttpStatus.CREATED).body(userMapper.toResponse(created));
     }
 
     // authenticate() throws on bad credentials; GlobalExceptionHandler maps
